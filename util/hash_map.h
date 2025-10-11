@@ -16,7 +16,7 @@ typedef struct LinkedList {
 extern LinkedList* buckets;
 
 // Function declarations
-LinkedList* map(void);
+LinkedList* hash_map(void);
 int hash_function(int* key);
 void add(int* key, int value, LinkedList* buckets);
 void put(int* key, int value, LinkedList* buckets);

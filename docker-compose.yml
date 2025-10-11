@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  server:
+    build: .
+    container_name: connect4_server
+    ports:
+      - "12345:12345"
+    tty: true
+  client1:
+    build: .
+    container_name: connect4_client1
+    command: ["/app/client", "server", "12345"]
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true
+  client2:
+    build: .
+    container_name: connect4_client2
+    command: ["/app/client", "server", "12345"]
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true

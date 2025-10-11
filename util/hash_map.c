@@ -3,7 +3,7 @@
 
 LinkedList* buckets;
 
-LinkedList* map(void) {
+LinkedList* hash_map(void) {
     buckets = (LinkedList *)malloc(sizeof(LinkedList) * HASH_SET_SIZE);
     for(size_t i = 0; i < HASH_SET_SIZE; i++) {
         buckets[i].next = NULL;
