@@ -5,8 +5,8 @@
 
 int main(int argc, char const* argv[]) {
     printf("Running tests for hash_map...\n");
-    LinkedList* my_dict = map();
-    LinkedList* my_dict2 = map();
+    LinkedList* my_dict = hash_map();
+    LinkedList* my_dict2 = hash_map();
     int array1[2] = {1, 2};
     int array2[2] = {1, 2};
     int array3[2] = {2, 1};
@@ -25,10 +25,10 @@ int main(int argc, char const* argv[]) {
     assert(get(array1, my_dict2) == 5);
     assert(get(array2, my_dict2) == 5);
 
-    LinkedList* vertical = map();
-    LinkedList* horizontal = map();
-    LinkedList* pos_diagonal = map();
-    LinkedList* neg_diagonal = map();
+    LinkedList* vertical = hash_map();
+    LinkedList* horizontal = hash_map();
+    LinkedList* pos_diagonal = hash_map();
+    LinkedList* neg_diagonal = hash_map();
     LinkedList** dir_dictionaries = (LinkedList **)malloc(sizeof(vertical) * 4);
     dir_dictionaries[0] = vertical;
     dir_dictionaries[1] = horizontal;
@@ -40,19 +40,19 @@ int main(int argc, char const* argv[]) {
     assert(!contains(coord, horizontal));
 
     // Test empty map
-    LinkedList* empty_map = map();
+    LinkedList* empty_map = hash_map();
     int test_key[2] = {5, 5};
     assert(!contains(test_key, empty_map));
 
     // Test negative coordinates
-    LinkedList* neg_map = map();
+    LinkedList* neg_map = hash_map();
     int neg_coord[2] = {-1, -2};
     add(neg_coord, 10, neg_map);
     assert(contains(neg_coord, neg_map));
     assert(get(neg_coord, neg_map) == 10);
 
     // Test overwriting values
-    LinkedList* overwrite_map = map();
+    LinkedList* overwrite_map = hash_map();
     int key[2] = {3, 4};
     add(key, 100, overwrite_map);
     assert(get(key, overwrite_map) == 100);
@@ -60,7 +60,7 @@ int main(int argc, char const* argv[]) {
     assert(get(key, overwrite_map) == 200);
 
     // Test multiple keys with same hash
-    LinkedList* collision_map = map();
+    LinkedList* collision_map = hash_map();
     int key1[2] = {0, 0};
     int key2[2] = {HASH_SET_SIZE, 0};
     add(key1, 1, collision_map);
@@ -69,7 +69,7 @@ int main(int argc, char const* argv[]) {
     assert(get(key2, collision_map) == 2);
 
     // Test remove non-existent key
-    LinkedList* remove_map = map();
+    LinkedList* remove_map = hash_map();
     int nonexist[2] = {99, 99};
     remove_item(nonexist, remove_map);
     assert(!contains(nonexist, remove_map));

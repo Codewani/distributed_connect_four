@@ -1,61 +1,65 @@
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <iostream>
+#include <cstring>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <array>
+#include <string>
 
 #include "connect_4_helpers.h"
+
+using namespace std;
 
 #define PORT 12345
 #define MAX_MSG 256
 
-
-static void* client_thread(void* v);
-
-static int player_fds[3] = { -1, -1, -1 }; // index 1 and 2
+static array<int, 3> player_fds = { -1, -1, -1 }; // index 1 and 2
 static char board[6][7];
 static int current_turn = 1; // 1 or 2
 static int winner = 0;
 
-static pthread_mutex_t game_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t turn_cond = PTHREAD_COND_INITIALIZER;
+static mutex game_lock;
+static condition_variable turn_cond;
 
-static void send_to_player(int fd, const char* msg) {
-    send(fd, msg, strlen(msg), 0);
+static void send_to_player(int fd, const string& msg) {
+    send(fd, msg.c_str(), msg.size(), 0);
 }
 
-static void broadcast(const char* msg) {
+static void broadcast(const string& msg) {
     for (int p = 1; p <= 2; p++) {
         if (player_fds[p] != -1) send_to_player(player_fds[p], msg);
     }
 }
 
-struct client_arg { int fd; int player_id; };
+struct ClientArg {
+    int fd;
+    int player_id;
+};
 
-static void* client_thread(void* v) {
-    struct client_arg* a = (struct client_arg*)v;
-    int fd = a->fd;
-    int pid = a->player_id;
+static void client_thread(ClientArg arg) {
+    int fd = arg.fd;
+    int pid = arg.player_id;
     char buf[MAX_MSG];
 
     // Welcome already sent by main acceptor
     while (!winner) {
         // Wait for my turn
-        pthread_mutex_lock(&game_lock);
+        unique_lock<mutex> lock(game_lock);
         while (current_turn != pid && !winner) {
             send_to_player(fd, "WAIT\n");
-            pthread_cond_wait(&turn_cond, &game_lock);
+            turn_cond.wait(lock);
         }
         if (winner) {
-            pthread_mutex_unlock(&game_lock);
+            lock.unlock();
             break;
         }
         // It's my turn
         send_to_player(fd, "YOUR_TURN\n");
-        pthread_mutex_unlock(&game_lock);
+        lock.unlock();
 
         ssize_t r = recv(fd, buf, sizeof(buf)-1, 0);
         if (r <= 0) break; // disconnect or error
@@ -64,57 +68,55 @@ static void* client_thread(void* v) {
         if (sscanf(buf, " ( %d , %d ) ", &x, &y) != 2) {
             send_to_player(fd, "INVALID\n");
             // still my turn; continue loop
-            pthread_mutex_lock(&game_lock);
-            pthread_cond_broadcast(&turn_cond);
-            pthread_mutex_unlock(&game_lock);
+            lock.lock();
+            turn_cond.notify_all();
+            lock.unlock();
             continue;
         }
         if (x < 0 || x > 5 || y < 0 || y > 6) {
             send_to_player(fd, "OUT_OF_BOUNDS\n");
-            pthread_mutex_lock(&game_lock);
-            pthread_cond_broadcast(&turn_cond);
-            pthread_mutex_unlock(&game_lock);
+            lock.lock();
+            turn_cond.notify_all();
+            lock.unlock();
             continue;
         }
-        pthread_mutex_lock(&game_lock);
+        lock.lock();
         if (!is_valid_move(x, y)) {
             send_to_player(fd, "INVALID_MOVE\n");
-            pthread_cond_broadcast(&turn_cond);
-            pthread_mutex_unlock(&game_lock);
+            turn_cond.notify_all();
+            lock.unlock();
             continue;
         }
 
         // apply move
         board[x][y] = (pid == 1) ? 'X' : 'O';
         make_move(x, y, (pid == 1) ? 'X' : 'O');
-        char notify[MAX_MSG];
-        snprintf(notify, sizeof(notify), "MOVE %d %d %d\n", pid, x, y);
+        string notify = "MOVE " + to_string(pid) + " " + to_string(x) + " " + to_string(y) + "\n";
         broadcast(notify);
 
         if (check_winner(board, (pid == 1) ? 'X' : 'O')) {
-            snprintf(notify, sizeof(notify), "WINNER %d\n", pid);
+            notify = "WINNER " + to_string(pid) + "\n";
             broadcast(notify);
-            winner = 1;
-            pthread_cond_broadcast(&turn_cond);
-            pthread_mutex_unlock(&game_lock);
+            winner = pid;
+            turn_cond.notify_all();
+            lock.unlock();
             break;
         }
 
         // next player's turn
         current_turn = (current_turn == 1) ? 2 : 1;
-        pthread_cond_broadcast(&turn_cond);
-        pthread_mutex_unlock(&game_lock);
+        turn_cond.notify_all();
+        lock.unlock();
     }
 
     close(fd);
-    return NULL;
 }
 
-int main(void) {
+int main() {
     int server_fd;
     struct sockaddr_in address;
     int opt = 1;
-    int addrlen = sizeof(address);
+    socklen_t addrlen = sizeof(address);
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
@@ -135,7 +137,7 @@ int main(void) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address))<0) {
+    if (::bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
@@ -144,33 +146,32 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Waiting for player 1...\n");
-    int s1 = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+    cout << "Waiting for player 1..." << endl;
+    int s1 = accept(server_fd, (struct sockaddr*)&address, &addrlen);
     if (s1 < 0) { perror("accept"); exit(EXIT_FAILURE); }
     player_fds[1] = s1;
     send_to_player(s1, "WELCOME 1\n");
-    printf("Player 1 connected\n");
+    cout << "Player 1 connected" << endl;
 
-    printf("Waiting for player 2...\n");
-    int s2 = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+    cout << "Waiting for player 2..." << endl;
+    int s2 = accept(server_fd, (struct sockaddr*)&address, &addrlen);
     if (s2 < 0) { perror("accept"); exit(EXIT_FAILURE); }
     player_fds[2] = s2;
     send_to_player(s2, "WELCOME 2\n");
-    printf("Player 2 connected\n");
+    cout << "Player 2 connected" << endl;
 
     // initialize game state
     for (int i = 0; i < 6; i++) for (int j = 0; j < 7; j++) board[i][j] = '.';
     initialize();
 
-    pthread_t t1, t2;
-    struct client_arg a1 = { player_fds[1], 1 };
-    struct client_arg a2 = { player_fds[2], 2 };
+    ClientArg a1 = { player_fds[1], 1 };
+    ClientArg a2 = { player_fds[2], 2 };
 
-    pthread_create(&t1, NULL, client_thread, &a1);
-    pthread_create(&t2, NULL, client_thread, &a2);
+    thread t1(client_thread, a1);
+    thread t2(client_thread, a2);
 
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
+    t1.join();
+    t2.join();
 
     close(server_fd);
     return 0;

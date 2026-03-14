@@ -68,6 +68,7 @@ int check_winner(char board[6][7], char player) {
                     int prev[2] = {i + directions[k][0], j + directions[k][1]};
                     if (contains(prev, dir_dictionaries[k]) == 1){
                         int count = get(prev, dir_dictionaries[k]);
+                        printf("count is %d", count);
                         if (count == 3) {
                             free(dir_dictionaries);
                             return 1;

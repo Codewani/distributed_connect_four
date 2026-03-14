@@ -1,0 +1,8 @@
+.git
+*.o
+*.out
+*.exe
+client.dSYM
+server.dSYM
+node_modules
+__pycache__
