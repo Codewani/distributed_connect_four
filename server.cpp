@@ -90,18 +90,16 @@ static void client_thread(ClientArg arg) {
 
         // apply move
         board[x][y] = (pid == 1) ? 'X' : 'O';
-        make_move(x, y, (pid == 1) ? 'X' : 'O');
-        string notify = "MOVE " + to_string(pid) + " " + to_string(x) + " " + to_string(y) + "\n";
-        broadcast(notify);
-
-        if (check_winner(board, (pid == 1) ? 'X' : 'O')) {
-            notify = "WINNER " + to_string(pid) + "\n";
+        if (make_move(x, y, (pid == 1) ? 'X' : 'O') == 1) {
+            string notify = "WINNER " + to_string(pid) + "\n";
             broadcast(notify);
             winner = pid;
             turn_cond.notify_all();
             lock.unlock();
             break;
         }
+        string notify = "MOVE " + to_string(pid) + " " + to_string(x) + " " + to_string(y) + "\n";
+        broadcast(notify);
 
         // next player's turn
         current_turn = (current_turn == 1) ? 2 : 1;
